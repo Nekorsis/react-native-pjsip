@@ -138,18 +138,17 @@
             self.tlsTransportId = id;
         }
     }
-    
+
     // Initialization is done, now start pjsua
     status = pjsua_start();
     if (status != PJ_SUCCESS) NSLog(@"Error starting pjsua");
-    
+
     return self;
 }
 
-- (NSDictionary *)start: (NSDictionary *)config {
+- (NSDictionary *) start {
     NSMutableArray *accountsResult = [[NSMutableArray alloc] initWithCapacity:[@([self.accounts count]) unsignedIntegerValue]];
     NSMutableArray *callsResult = [[NSMutableArray alloc] initWithCapacity:[@([self.calls count]) unsignedIntegerValue]];
-    NSDictionary *settingsResult = @{ @"codecs": [self getCodecs] };
 
     for (NSString *key in self.accounts) {
         PjSipAccount *acc = self.accounts[key];
@@ -161,39 +160,13 @@
         [callsResult addObject:[call toJsonDictionary:self.isSpeaker]];
     }
     
-    if ([accountsResult count] > 0 && config[@"service"] && config[@"service"][@"stun"]) {
-        for (NSDictionary *account in accountsResult) {
-            int accountId = account[@"_data"][@"id"];
-            [[PjSipEndpoint instance] updateStunServers:accountId stunServerList:config[@"service"][@"stun"]];
-        }
-    }
-    
-    return @{@"accounts": accountsResult, @"calls": callsResult, @"settings": settingsResult, @"connectivity": @YES};
-}
-
-- (void)updateStunServers:(int)accountId stunServerList:(NSArray *)stunServerList {
-    int size = [stunServerList count];
-    int count = 0;
-    pj_str_t srv[size];
-    for (NSString *stunServer in stunServerList) {
-        srv[count] = pj_str([stunServer UTF8String]);
-        count++;
-    }
-    
-    pjsua_acc_config cfg_update;
-    pj_pool_t *pool = pjsua_pool_create("tmp-pjsua", 1000, 1000);
-    pjsua_acc_config_default(&cfg_update);
-    pjsua_acc_get_config(accountId, pool, &cfg_update);
-    NSLog([NSString stringWithFormat: @"I AM ACC ID: %d", accountId]);
-    pjsua_update_stun_servers(size, srv, false);
-    
-    pjsua_acc_modify(accountId, &cfg_update);
+    return @{@"accounts": accountsResult, @"calls": callsResult, @"connectivity": @YES};
 }
 
 - (PjSipAccount *)createAccount:(NSDictionary *)config {
     PjSipAccount *account = [PjSipAccount itemConfig:config];
     self.accounts[@(account.id)] = account;
-    
+
     return account;
 }
 
@@ -307,27 +280,10 @@
     for (NSString * key in codecSettings) {
         pj_str_t codec_id = pj_str((char *) [key UTF8String]);
         NSNumber * priority = codecSettings[key];
-        pj_uint8_t convertedPriority = [priority integerValue];
-        pjsua_codec_set_priority(&codec_id, convertedPriority);
+        pjsua_codec_set_priority(&codec_id, priority);
     }
-}
-
-- (NSMutableDictionary *) getCodecs {
-    //32 max possible codecs
-    pjsua_codec_info codec[32];
-    NSMutableDictionary *codecs = [[NSMutableDictionary alloc] initWithCapacity:32];
-    unsigned uCount = 32;
     
-    if (pjsua_enum_codecs(codec, &uCount) == PJ_SUCCESS) {
-        for (unsigned i = 0; i < uCount; ++i) {
-            NSString * codecName = [NSString stringWithFormat:@"%s", codec[i].codec_id.ptr];
-            [codecs setObject:[NSNumber numberWithInt: codec[i].priority] forKey: codecName];
-        }
-    }
-    return codecs;
 }
-
-
 #pragma mark - Events
 
 -(void)emmitRegistrationChanged:(PjSipAccount*) account {
